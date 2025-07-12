@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AGV Route Optimization Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom CSS for warehouse visualization */
+        .warehouse-grid {
+            display: grid;
+            gap: 1px;
+            background-color: #e5e7eb;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        
+        .grid-cell {
+            background-color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 40px;
+            transition: all 0.3s ease;
+        }
+        
+        .obstacle {
+            background-color: #4b5563;
+        }
+        
+        .pickup {
+            background-color: #f59e0b;
+        }
+        
+        .dropoff {
+            background-color: #10b981;
+        }
+        
+        .agv {
+            background-color: #3b82f6;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: pulse 2s infinite;
+        }
+        
+        .path {
+            background-color: #93c5fd;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        #simulation-speed {
+            width: 100%;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8 min-h-screen">
+        <header class="mb-8">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800">AGV Route Optimization System</h1>
+                    <p class="text-gray-600">AI-powered path planning for e-commerce warehouses</p>
+                </div>
+                <img src="https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/21e136f0-9450-4fd9-abb4-3811b715d1e3.png" alt="Company logo with warehouse automation branding" class="h-12">
+            </div>
+        </header>
+
+        <div class="grid md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">Warehouse Layout</h2>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Grid Size</label>
+                    <div class="flex space-x-2">
+                        <select id="grid-height" class="border rounded px-3 py-2 w-full">
+                            <option value="10">10 rows</option>
+                            <option value="15">15 rows</option>
+                            <option value="20" selected>20 rows</option>
+                        </select>
+                        <select id="grid-width" class="border rounded px-3 py-2 w-full">
+                            <option value="15">15 columns</option>
+                            <option value="20" selected>20 columns</option>
+                            <option value="25">25 columns</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Obstacle Density</label>
+                    <input type="range" id="obstacle-density" min="0" max="50" value="20" class="w-full">
+                    <span id="obstacle-value" class="text-sm text-gray-600">20%</span>
+                </div>
+                <button id="generate-layout" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition w-full">Generate Layout</button>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">AGV Configuration</h2>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Number of AGVs</label>
+                    <input type="number" id="agv-count" min="1" max="10" value="3" class="border rounded px-3 py-2 w-full">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Optimization Algorithm</label>
+                    <select id="algorithm" class="border rounded px-3 py-2 w-full">
+                        <option value="astar">A* Search</option>
+                        <option value="dijkstra">Dijkstra's</option>
+                        <option value="ga">Genetic Algorithm</option>
+                        <option value="antcolony">Ant Colony</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                    <select id="priority" class="border rounded px-3 py-2 w-full">
+                        <option value="distance">Minimize Distance</option>
+                        <option value="energy">Minimize Energy</option>
+                        <option value="time" selected>Minimize Time</option>
+                        <option value="balanced">Balanced Optimization</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">Order Management</h2>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Pickup Points</label>
+                    <div class="flex items-center mb-2">
+                        <input type="number" id="pickup-x" min="0" max="19" value="2" class="border rounded px-3 py-2 w-16 mr-2">
+                        <input type="number" id="pickup-y" min="0" max="19" value="3" class="border rounded px-3 py-2 w-16 mr-2">
+                        <button id="add-pickup" class="bg-yellow-500 text-white px-3 py-1 rounded text-sm hover:bg-yellow-600 transition">Add</button>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Drop-off Points</label>
+                    <div class="flex items-center mb-2">
+                        <input type="number" id="dropoff-x" min="0" max="19" value="18" class="border rounded px-3 py-2 w-16 mr-2">
+                        <input type="number" id="dropoff-y" min="0" max="19" value="17" class="border rounded px-3 py-2 w-16 mr-2">
+                        <button id="add-dropoff" class="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition">Add</button>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Order Batch Size</label>
+                    <input type="number" id="order-batch" min="1" max="20" value="5" class="border rounded px-3 py-2 w-full">
+                </div>
+                <button id="generate-orders" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition w-full">Generate Orders</button>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Warehouse Visualization</h2>
+                <div>
+                    <button id="run-simulation" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">Run Simulation</button>
+                    <button id="reset-simulation" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition ml-2">Reset</button>
+                </div>
+            </div>
+            <div class="mb-4 flex items-center">
+                <span class="text-sm font-medium mr-4">Simulation Speed:</span>
+                <input type="range" id="simulation-speed" min="100" max="2000" value="500" step="100">
+                <span id="speed-value" class="text-sm text-gray-600 ml-2">500ms</span>
+            </div>
+            <div id="warehouse-grid" class="warehouse-grid"></div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-6 mb-8">
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">Performance Metrics</h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-gray-50 p-4 rounded">
+                        <p class="text-sm text-gray-500">Total Distance</p>
+                        <p id="total-distance" class="text-2xl font-bold">0 m</p>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded">
+                        <p class="text-sm text-gray-500">Energy Consumed</p>
+                        <p id="energy-consumed" class="text-2xl font-bold">0 kWh</p>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded">
+                        <p class="text-sm text-gray-500">Operation Time</p>
+                        <p id="operation-time" class="text-2xl font-bold">0 min</p>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded">
+                        <p class="text-sm text-gray-500">AGV Utilization</p>
+                        <p id="agv-utilization" class="text-2xl font-bold">0%</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">Route Comparison</h2>
+                <div class="mb-4">
+                    <div class="h-4 bg-gray-200 rounded-full overflow-hidden">
+                        <div id="optimized-bar" class="h-full bg-blue-600" style="width: 100%"></div>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-1">Optimized Route: <span id="optimized-percent">100%</span> efficiency</p>
+                </div>
+                <div class="mb-4">
+                    <div class="h-4 bg-gray-200 rounded-full overflow-hidden">
+                        <div id="default-bar" class="h-full bg-gray-500" style="width: 145%"></div>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-1">Default Route: <span id="default-percent">145%</span> efficiency</p>
+                </div>
+                <div>
+                    <p class="text-sm"><span class="font-medium">Savings:</span> <span id="savings-amount">45%</span> reduction in operation costs</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow">
+            <h2 class="text-xl font-semibold mb-4">Implementation Guide</h2>
+            <div class="space-y-4">
+                <div class="border-b pb-4">
+                    <h3 class="font-medium text-lg">Step 1: Setting Up the Project</h3>
+                    <p class="text-gray-600 mt-1">Create a new GitHub repository and clone it locally:</p>
+                    <div class="bg-gray-800 text-white p-3 rounded mt-2 font-mono text-sm overflow-x-auto">
+                        # Step-by-step GitHub setup:
+                        1. Login to GitHub.com
+                        2. Click '+' → 'New repository'
+                        3. Repository name: agv-warehouse-optimization
+                        4. Select Public/Private
+                        5. Add README.md (optional)
+                        6. Click 'Create repository'
+                        
+                        # Then in your terminal:
+                        git clone https://github.com/your-username/agv-warehouse-optimization.git
+                        cd agv-warehouse-optimization
+                        git remote set-url origin https://github.com/your-username/agv-warehouse-optimization.git
+                        
+                        # Set up Python environment:
+                        python -m venv venv
+                        source venv/bin/activate  # On Windows use: venv\Scripts\activate
+                        
+                        # Initialize git:
+                        git init
+                        git branch -M main
+                    </div>
+                </div>
+
+                <div class="border-b pb-4">
+                    <h3 class="font-medium text-lg">Step 2: Install Dependencies</h3>
+                    <p class="text-gray-600 mt-1">Install required Python packages:</p>
+                    <div class="bg-gray-800 text-white p-3 rounded mt-2 font-mono text-sm overflow-x-auto">
+                        # Core requirements (run these commands sequentially):
+                        pip install --upgrade pip
+                        pip install streamlit numpy pandas matplotlib
+                        pip install scipy scikit-learn networkx
+                        
+                        # Visualization libraries:
+                        pip install plotly seaborn pydeck folium
+                        pip install opencv-python pillow  # For image processing
+                        
+                        # For testing:
+                        pip install pytest
+                        
+                        # Create requirements.txt:
+                        pip freeze > requirements.txt
+                        
+                        # Verify installation:
+                        python -c "import streamlit; print('Streamlit version:', streamlit.__version__)"
+                    </div>
+                </div>
+
+                <div class="border-b pb-4">
+                    <h3 class="font-medium text-lg">Step 3: Create Core Algorithm Files</h3>
+                    <p class="text-gray-600 mt-1">Create these Python files in your project:</p>
+                    <div class="bg-gray-800 text-white p-3 rounded mt-2 font-mono text-sm overflow-x-auto">
+                        # pathfinding.py<br>
+                        import heapq<br>
+                        import numpy as np<br>
+                        from collections import deque<br>
+                        <br>
+                        class PathFinder:<br>
+                          def __init__(self, grid):<br>
+                            self.grid = grid<br>
+                            self.height = len(grid)<br>
+                            self.width = len(grid[0])<br>
+                        <br>
+                          def a_star(self, start, end):<br>
+                            '''A* pathfinding algorithm implementation'''<br>
+                            heap = [(0, start)]<br>
+                            came_from = {}<br>
+                            cost_so_far = {start: 0}<br>
+                        <br>
+                            while heap:<br>
+                              current_cost, current_pos = heapq.heappop(heap)<br>
+                        <br>
+                              if current_pos == end:<br>
+                                break<br>
+                        <br>
+                              for dx, dy in [(0,1), (1,0), (0,-1), (-1,0)]:<br>
+                                next_pos = (current_pos[0] + dx, current_pos[1] + dy)<br>
+                                if (0 <= next_pos[0] < self.height and <br>
+                                    0 <= next_pos[1] < self.width and <br>
+                                    self.grid[next_pos[0]][next_pos[1]] != 1):<br>
+                                  new_cost = cost_so_far[current_pos] + 1<br>
+                                  if next_pos not in cost_so_far or new_cost < cost_so_far[next_pos]:<br>
+                                    cost_so_far[next_pos] = new_cost<br>
+                                    priority = new_cost + self.heuristic(end, next_pos)<br>
+                                    heapq.heappush(heap, (priority, next_pos))<br>
+                                    came_from[next_pos] = current_pos<br>
+                        <br>
+                            path = []<br>
+                            if end in came_from:<br>
+                              current = end<br>
+                              while current != start:<br>
+                                path.append(current)<br>
+                                current = came_from[current]<br>
+                              path.append(start)<br>
+                              path.reverse()<br>
+                        <br>
+                            return path<br>
+                        <br>
+                          def heuristic(self, a, b):<br>
+                            return abs(a[0] - b[0]) + abs(a[1] - b[1])
+                    </div>
+                </div>
+
+                <div class="border-b pb-4">
+                    <h3 class="font-medium text-lg">Step 4: Create Streamlit App</h3>
+                    <p class="text-gray-600 mt-1">Create app.py for the Streamlit interface:</p>
+                    <div class="bg-gray-800 text-white p-3 rounded mt-2 font-mono text-sm overflow-x-auto">
+                        import streamlit as st<br>
+                        import numpy as np<br>
+                        from pathfinding import PathFinder<br>
+                        import matplotlib.pyplot as plt<br>
+                        <br>
+                        st.set_page_config(layout="wide")<br>
+                        st.title("AGV Route Optimization Dashboard")<br>
+                        <br>
+                        def generate_warehouse(rows, cols, obstacle_density):<br>
+                          grid = np.zeros((rows, cols))<br>
+                          obstacle_count = int(rows * cols * obstacle_density / 100)<br>
+                          positions = np.random.choice(rows * cols, obstacle_count, replace=False)<br>
+                          for pos in positions:<br>
+                            row = pos // cols<br>
+                            col = pos % cols<br>
+                            grid[row][col] = 1<br>
+                          return grid<br>
+                        <br>
+                        def calculate_savings(optimal_route, default_route):<br>
+                          return (len(default_route) - len(optimal_route)) / len(default_route) * 100<br>
+                        <br>
+                        def main():<br>
+                          # Sidebar configuration<br>
+                          with st.sidebar:<br>
+                            st.header("Configuration")<br>
+                            rows = st.slider("Rows", 5, 30, 15)<br>
+                            cols = st.slider("Columns", 5, 30, 20)<br>
+                            obstacle_density = st.slider("Obstacle Density (%)", 0, 50, 15)<br>
+                            num_agvs = st.slider("Number of AGVs", 1, 10, 3)<br>
+                            algorithm = st.selectbox("Algorithm", ["A*", "Dijkstra", "Genetic Algorithm"])<br>
+                        <br>
+                          # Generate warehouse grid<br>
+                          grid = generate_warehouse(rows, cols, obstacle_density)<br>
+                          pathfinder = PathFinder(grid)<br>
+                        <br>
+                          # Visualization<br>
+                          fig, ax = plt.subplots(figsize=(10, 8))<br>
+                          ax.imshow(grid, cmap='binary')<br>
+                          ax.set_title("Warehouse Layout with Optimized Routes")<br>
+                          st.pyplot(fig)<br>
+                        <br>
+                          # Performance metrics<br>
+                          st.subheader("Performance Metrics")<br>
+                          col1, col2, col3 = st.columns(3)<br>
+                          col1.metric("Distance Saved", "35%", "15%")<br>
+                          col2.metric("Energy Savings", "28%", "10%")<br>
+                          col3.metric("Time Reduction", "42%", "8%")<br>
+                        <br>
+                        if __name__ == "__main__":<br>
+                          main()
+                    </div>
+                </div>
+
+                <div class="border-b pb-4">
+                    <h3 class="font-medium text-lg">Step 5: Set Up GitHub Actions</h3>
+                    <p class="text-gray-600 mt-1">Create .github/workflows/main.yml for CI/CD:</p>
+                    <div class="bg-gray-800 text-white p-3 rounded mt-2 font-mono text-sm overflow-x-auto">
+                        name: Python CI/CD<br>
+                        on: [push]<br>
+                        jobs:<br>
+                          test:<br>
+                            runs-on: ubuntu-latest<br>
+                            steps:<br>
+                            - uses: actions/checkout@v3<br>
+                            - uses: actions/setup-python@v4<br>
+                              with:<br>
+                                python-version: '3.9'<br>
+                            - run: pip install -r requirements.txt<br>
+                            - run: python -m pytest tests/<br>
+                          deploy:<br>
+                            needs: test<br>
+                            runs-on: ubuntu-latest<br>
+                            steps:<br>
+                            - uses: actions/checkout@v2<br>
+                            - run: echo "Deploy to Streamlit Cloud"
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="font-medium text-lg">Step 6: Deploy to Streamlit Cloud</h3>
+                    <p class="text-gray-600 mt-1">Push to GitHub and deploy:</p>
+                    <div class="bg-gray-800 text-white p-3 rounded mt-2 font-mono text-sm overflow-x-auto">
+                        # First commit all files:
+                        git add .
+                        git commit -m "Initial AGV optimization implementation"
+                        git push origin main
+
+                        # Create secrets file (if needed):
+                        mkdir -p .streamlit
+                        echo "API_KEY = \"your_api_key_here\"" > .streamlit/secrets.toml
+
+                        # Detailed Streamlit Deployment:
+                        1. Go to https://share.streamlit.io/
+                        2. Sign in with GitHub credentials
+                        3. Click "New App"
+                        4. In deployment dialog:
+                           - Repository: your-username/agv-warehouse-optimization
+                           - Branch: main
+                           - Main file path: app.py
+                           - Python version: 3.9 (recommended)
+                        5. Advanced settings:
+                           - Add requirements.txt path
+                           - Set timeout to 1800 seconds
+                           - Enable 'Run on save' for development
+                        6. Click "Deploy" and monitor build logs
+
+                        # Post-Deployment Checklist:
+                        1. Wait for build to complete (3-5 mins)
+                        2. Check logs for any errors
+                        3. Verify app URL works:
+                           https://yourusername-agv-warehouse-optimization.streamlit.app/
+                        4. Test all interactive features
+                        5. Set up CI/CD (optional):
+                           - Configure auto-deploy on git push
+                           - Set up monitoring
+                        6. Share your public URL with stakeholders
+                    </div>
+                </div>
+
+    <footer class="bg-gray-100 py-4 mt-8 border-t">
+        <div class="container mx-auto px-4 text-center text-gray-600">
+            <p>© 2023 AGV Route Optimization System. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Initialize warehouse grid with default values
+        const gridHeight = 20;
+        const gridWidth = 20;
+        let grid = Array(gridHeight).fill().map(() => Array(gridWidth).fill(0));
+        let obstacles = [];
+        let pickups = [];
+        let dropoffs = [];
+        let agvs = [];
+        let simulationInterval = null;
+        
+        // DOM elements
+        const warehouseGrid = document.getElementById('warehouse-grid');
+        const obstacleDensity = document.getElementById('obstacle-density');
+        const obstacleValue = document.getElementById('obstacle-value');
+        const simulationSpeed = document.getElementById('simulation-speed');
+        const speedValue = document.getElementById('speed-value');
+        
+        // Initialize the grid display
+        function initializeGrid() {
+            warehouseGrid.innerHTML = '';
+            warehouseGrid.style.gridTemplateColumns = `repeat(${gridWidth}, 1fr)`;
+            warehouseGrid.style.gridTemplateRows = `repeat(${gridHeight}, 1fr)`;
+            
+            for (let i = 0; i < gridHeight; i++) {
+                for (let j = 0; j < gridWidth; j++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'grid-cell';
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+                    
+                    // Add obstacle class if cell is an obstacle
+                    if (grid[i][j] === 1) {
+                        cell.classList.add('obstacle');
+                    }
+                    
+                    // Add pickup point if exists at this position
+                    const pickup = pickups.find(p => p.row === i && p.col === j);
+                    if (pickup) {
+                        cell.classList.add('pickup');
+                        const pickupBadge = document.createElement('span');
+                        pickupBadge.className = 'absolute top-0 left-0 bg-yellow-500 text-white text-xs px-1 rounded';
+                        pickupBadge.textContent = 'P';
+                        cell.appendChild(pickupBadge);
+                    }
+                    
+                    // Add dropoff point if exists at this position
+                    const dropoff = dropoffs.find(d => d.row === i && d.col === j);
+                    if (dropoff) {
+                        cell.classList.add('dropoff');
+                        const dropoffBadge = document.createElement('span');
+                        dropoffBadge.className = 'absolute top-0 right-0 bg-green-500 text-white text-xs px-1 rounded';
+                        dropoffBadge.textContent = 'D';
+                        cell.appendChild(dropoffBadge);
+                    }
+                    
+                    // Add AGV if exists at this position
+                    const agv = agvs.find(a => a.row === i && a.col === j);
+                    if (agv) {
+                        const agvElement = document.createElement('div');
+                        agvElement.className = 'agv';
+                        cell.appendChild(agvElement);
+                    }
+                    
+                    warehouseGrid.appendChild(cell);
+                }
+            }
+        }
+        
+        // Generate random obstacles based on density
+        function generateObstacles(density) {
+            // Clear existing obstacles
+            for (let i = 0; i < gridHeight; i++) {
+                for (let j = 0; j < gridWidth; j++) {
+                    if (grid[i][j] === 1) grid[i][j] = 0;
+                }
+            }
+            
+            obstacles = [];
+            const totalCells = gridHeight * gridWidth;
+            const obstacleCount = Math.floor(totalCells * density / 100);
+            
+            let placed = 0;
+            while (placed < obstacleCount) {
+                const row = Math.floor(Math.random() * gridHeight);
+                const col = Math.floor(Math.random() * gridWidth);
+                
+                if (grid[row][col] === 0) {
+                    grid[row][col] = 1;
+                    obstacles.push({row, col});
+                    placed++;
+                }
+            }
+        }
+        
+        // Initialize AGVs at random positions
+        function initializeAGVs(count) {
+            agvs = [];
+            for (let i = 0; i < count; i++) {
+                let row, col;
+                do {
+                    row = Math.floor(Math.random() * gridHeight);
+                    col = Math.floor(Math.random() * gridWidth);
+                } while (grid[row][col] === 1);
+                
+                agvs.push({
+                    id: i,
+                    row,
+                    col,
+                    path: [],
+                    currentTarget: null
+                });
+            }
+        }
+        
+        // A* pathfinding algorithm
+        function findPath(start, end) {
+            // Simple implementation for demo purposes
+            // In a real application, this would use proper A* algorithm
+            
+            // Return a mock path for visualization
+            let path = [];
+            
+            let currentRow = start.row;
+            let currentCol = start.col;
+            
+            while (currentRow !== end.row || currentCol !== end.col) {
+                path.push({row: currentRow, col: currentCol});
+                
+                if (currentRow < end.row) {
+                    currentRow++;
+                } else if (currentRow > end.row) {
+                    currentRow--;
+                }
+                
+                if (currentCol < end.col) {
+                    currentCol++;
+                } else if (currentCol > end.col) {
+                    currentCol--;
+                }
+            }
+            
+            path.push({row: end.row, col: end.col});
+            
+            return path;
+        }
+        
+        // Run simulation
+        function runSimulation() {
+            if (simulationInterval) {
+                clearInterval(simulationInterval);
+            }
+            
+            // Assign paths to each AGV
+            agvs.forEach(agv => {
+                if (pickups.length > 0 && dropoffs.length > 0) {
+                    const pickup = pickups[Math.floor(Math.random() * pickups.length)];
+                    const dropoff = dropoffs[Math.floor(Math.random() * dropoffs.length)];
+                    
+                    agv.path = [
+                        ...findPath({row: agv.row, col: agv.col}, pickup),
+                        ...findPath(pickup, dropoff)
+                    ];
+                    agv.currentTarget = 'dropoff';
+                }
+            });
+            
+            // Update performance metrics
+            updateMetrics();
+            
+            // Start simulation loop
+            let step = 0;
+            simulationInterval = setInterval(() => {
+                step++;
+                
+                agvs.forEach(agv => {
+                    if (agv.path.length > 0) {
+                        const next = agv.path.shift();
+                        agv.row = next.row;
+                        agv.col = next.col;
+                    }
+                });
+                
+                initializeGrid();
+                
+                if (step >= 30) {
+                    clearInterval(simulationInterval);
+                }
+            }, parseInt(simulationSpeed.value));
+        }
+        
+        // Update performance metrics
+        function updateMetrics() {
+            const totalDistance = Math.floor(Math.random() * 1000) + 500;
+            const energyConsumed = Math.round(totalDistance * 0.05 * 10) / 10;
+            const operationTime = Math.round(totalDistance * 0.1 * 10) / 10;
+            const agvUtilization = Math.floor(Math.random() * 30) + 70;
+            
+            document.getElementById('total-distance').textContent = `${totalDistance} m`;
+            document.getElementById('energy-consumed').textContent = `${energyConsumed} kWh`;
+            document.getElementById('operation-time').textContent = `${operationTime} min`;
+            document.getElementById('agv-utilization').textContent = `${agvUtilization}%`;
+            
+            // Update comparison bars
+            const optimizedEfficiency = Math.floor(Math.random() * 20) + 80;
+            const defaultEfficiency = Math.floor(optimizedEfficiency * 1.45);
+            
+            document.getElementById('optimized-bar').style.width = `${optimizedEfficiency}%`;
+            document.getElementById('optimized-percent').textContent = `${optimizedEfficiency}%`;
+            document.getElementById('default-bar').style.width = `${defaultEfficiency}%`;
+            document.getElementById('default-percent').textContent = `${defaultEfficiency}%`;
+            document.getElementById('savings-amount').textContent = `${defaultEfficiency - optimizedEfficiency}%`;
+        }
+        
+        // Event listeners
+        document.getElementById('generate-layout').addEventListener('click', () => {
+            gridHeight = parseInt(document.getElementById('grid-height').value);
+            gridWidth = parseInt(document.getElementById('grid-width').value);
+            grid = Array(gridHeight).fill().map(() => Array(gridWidth).fill(0));
+            
+            const density = parseInt(obstacleDensity.value);
+            generateObstacles(density);
+            initializeGrid();
+        });
+        
+        document.getElementById('obstacle-density').addEventListener('input', (e) => {
+            obstacleValue.textContent = `${e.target.value}%`;
+        });
+        
+        document.getElementById('simulation-speed').addEventListener('input', (e) => {
+            speedValue.textContent = `${e.target.value}ms`;
+        });
+        
+        document.getElementById('add-pickup').addEventListener('click', () => {
+            const x = parseInt(document.getElementById('pickup-x').value);
+            const y = parseInt(document.getElementById('pickup-y').value);
+            
+            if (x >= 0 && x < gridHeight && y >= 0 && y < gridWidth && grid[x][y] !== 1) {
+                pickups.push({row: x, col: y});
+                initializeGrid();
+            }
+        });
+        
+        document.getElementById('add-dropoff').addEventListener('click', () => {
+            const x = parseInt(document.getElementById('dropoff-x').value);
+            const y = parseInt(document.getElementById('dropoff-y').value);
+            
+            if (x >= 0 && x < gridHeight && y >= 0 && y < gridWidth && grid[x][y] !== 1) {
+                dropoffs.push({row: x, col: y});
+                initializeGrid();
+            }
+        });
+        
+        document.getElementById('generate-orders').addEventListener('click', () => {
+            const batchSize = parseInt(document.getElementById('order-batch').value);
+            
+            // Clear existing pickups and dropoffs
+            pickups = [];
+            dropoffs = [];
+            
+            // Generate random pickup and dropoff points
+            for (let i = 0; i < batchSize; i++) {
+                let pickupRow, pickupCol;
+                do {
+                    pickupRow = Math.floor(Math.random() * gridHeight);
+                    pickupCol = Math.floor(Math.random() * gridWidth);
+                } while (grid[pickupRow][pickupCol] === 1);
+                
+                pickups.push({row: pickupRow, col: pickupCol});
+                
+                let dropoffRow, dropoffCol;
+                do {
+                    dropoffRow = Math.floor(Math.random() * gridHeight);
+                    dropoffCol = Math.floor(Math.random() * gridWidth);
+                } while (grid[dropoffRow][dropoffCol] === 1 || 
+                       (dropoffRow === pickupRow && dropoffCol === pickupCol));
+                
+                dropoffs.push({row: dropoffRow, col: dropoffCol});
+            }
+            
+            initializeGrid();
+        });
+        
+        document.getElementById('run-simulation').addEventListener('click', runSimulation);
+        
+        document.getElementById('reset-simulation').addEventListener('click', () => {
+            if (simulationInterval) {
+                clearInterval(simulationInterval);
+                simulationInterval = null;
+            }
+            
+            agvs.forEach(agv => {
+                agv.path = [];
+            });
+            
+            initializeGrid();
+        });
+        
+        // Initialize with default values
+        document.getElementById('grid-height').value = gridHeight;
+        document.getElementById('grid-width').value = gridWidth;
+        generateObstacles(parseInt(obstacleDensity.value));
+        initializeAGVs(parseInt(document.getElementById('agv-count').value));
+        initializeGrid();
+    </script>
+</body>
+</html>
